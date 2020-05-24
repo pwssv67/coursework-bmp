@@ -1,3 +1,4 @@
+import struct
 from dataclasses import dataclass
 import re
 from struct import unpack
@@ -250,27 +251,34 @@ class Image:
         counter_width_temp = counter_width
         counter_height_temp = counter_height
         source_i = 0
-        source_j = 0
-        for i in range(height+1):
+
+        for i in range(height):
+            source_j = 0
             for j in range(width):
-                img.rgb[i][j].blue = self.rgb[source_i][source_j].blue
-                img.rgb[i][j].green = self.rgb[source_i][source_j].green
-                img.rgb[i][j].red = self.rgb[source_i][source_j].red
+                img.rgb[i][j].blue = copy.deepcopy(self.rgb[source_i][source_j].blue)
+                img.rgb[i][j].green = copy.deepcopy(self.rgb[source_i][source_j].green)
+                img.rgb[i][j].red = copy.deepcopy(self.rgb[source_i][source_j].red)
                 counter_width_temp += counter_width
 
-                if counter_width_temp >= 1:
+                if counter_width_temp > 1:
                     counter_width_temp -= 1
-                    if width_bigger and source_j +2 <= self.bitmap_info_header.width -1:
+                    if not width_bigger and source_j + 2 <= self.bitmap_info_header.width - 1:
                         source_j += 2
+                    if width_bigger and counter_width >= 1:
+                        #counter_width_temp += 1
+                        counter_width_temp -= int(counter_width)
                 else:
                     if source_j + 1 <= self.bitmap_info_header.width - 1:
                         source_j += 1
 
             counter_height_temp += counter_height
-            if counter_height_temp >= 1:
+            if counter_height_temp > 1:
                 counter_height_temp -= 1
-                if height_bigger and source_i + 2 <= self.bitmap_info_header.height - 1:
-                    source_i += 2
+                if not height_bigger and source_i + 1 <= self.bitmap_info_header.height - 1:
+                    source_i += 1
+                if height_bigger and counter_height >= 1:
+                    #counter_height_temp += 1
+                    counter_height_temp -= int(counter_height)
             else:
                 if source_i + 1 <= self.bitmap_info_header.height - 1:
                     source_i += 1
@@ -285,6 +293,7 @@ class Image:
         if self.bitmap_info_header.bit_count == 24:
             color_counter = 3
             add = self.bitmap_info_header.width*3
+            # add = 0
         elif self.bitmap_info_header.bit_count == 32:
             color_counter = 4
             add = 0
@@ -292,18 +301,29 @@ class Image:
             color_counter = 3
             add = 0
             print("Something weird just happened! It's neither 32, nor 24 bit per pixel")
+        overheight = False
         for i in range(0, self.bitmap_info_header.image_size+add, color_counter):
             width = (i//color_counter) % self.bitmap_info_header.width
             height = self.bitmap_info_header.height - (0 if add != 0 else 1) - (i//color_counter) // self.bitmap_info_header.width  # BTW somewhy bmp writes not left to right up to down, but l-to-r down-to-up. Why the hell?
-            self.rgb[height][width].blue = ord(unpack('<c', file[0x0 + i + offset:0x0 + i + offset + 1])[0])  # And also it writes not r-g-b, but b-g-r. Why, why, for the love of god why???
-            self.rgb[height][width].green = ord(unpack('<c', file[0x1 + i + offset:0x1 + i + offset + 1])[0])
-            self.rgb[height][width].red = ord(unpack('<c', file[0x2 + i + offset:0x2 + i + offset + 1])[0])
-            if i>self.bitmap_info_header.image_size:
+            try:
+                self.rgb[height][width].blue = ord(unpack('<c', file[0x0 + i + offset:0x0 + i + offset + 1])[0])  # And also it writes not r-g-b, but b-g-r. Why, why, for the love of god why???
+                self.rgb[height][width].green = ord(unpack('<c', file[0x1 + i + offset:0x1 + i + offset + 1])[0])
+                self.rgb[height][width].red = ord(unpack('<c', file[0x2 + i + offset:0x2 + i + offset + 1])[0])
+            except struct.error:
+                overheight = True
+                pass
+            if False:
                 print(i)
             if False and height>400:
                 print(width, end = " ")
                 print(height, end =" ")
                 print(self.rgb[height][width].blue)
+
+        if overheight:
+            self.bitmap_info_header.height -= 1
+            self.rgb.pop(0)
+        self.bitmap_info_header.image_size = self.bitmap_info_header.width * self.bitmap_info_header.size * self.bitmap_info_header.bit_count // 3
+        self.bitmap_file_header.size = self.bitmap_file_header.offset + self.bitmap_info_header.image_size
 
 
 #f = open_file("test.bmp")
@@ -325,8 +345,31 @@ class Image:
 #img.write_image("test_write.bmp")
 #img32.write_image("test_write32.bmp")
 
-img_default = Image.set_default(255,20,20,24)
-img_sized = img_default.copy_with_changed_size(30, 20)
-img_sized.write_image("test_sized.bmp")
-img_downsized = img_default.copy_with_changed_size(10,10)
-img_downsized.write_image("test_sized_down.bmp")
+#img_default = Image.set_default(255,20,20,24)
+#img_sized = img_default.copy_with_changed_size(30, 20)
+#img_sized.write_image("test_sized.bmp")
+#img_downsized = img_default.copy_with_changed_size(10,10)
+#img_downsized.write_image("test_sized_down.bmp")
+
+img_default = Image.read_from_file("test40.bmp")
+img_down = img_default.copy_with_changed_size(160, 240)
+img_down.write_image("test_down.bmp")
+
+
+def read_image(filename:str):
+    img = Image.read_from_file(filename)
+    return img
+
+
+def generate_image(mode:int, width:int, height: int, bit_count:int = 24):
+    img = Image.set_default(mode, width, height, bit_count)
+    return img
+
+
+def write_image(img: Image, filename:str):
+    img.write_image(filename)
+
+
+def copy_with_changed_size(img: Image, width:int, height:int):
+    img_copy = img.copy_with_changed_size(width, height)
+    return img_copy
