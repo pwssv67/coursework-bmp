@@ -117,23 +117,24 @@ class Image:
                 filename[filename.rfind("."):len(filename)] = ""
                 filename += "(1)" + extension
 
-        if not self.bitmap_file_header.size == self.bitmap_file_header.offset + self.bitmap_info_header.image_size:
-            self.bitmap_file_header.offset = 14 + self.bitmap_info_header.size
-            if self.bitmap_info_header.bit_count == 24:
-                self.bitmap_info_header.image_size += self.bitmap_info_header.width*3 - 2
-            self.bitmap_file_header.size = self.bitmap_file_header.offset + self.bitmap_info_header.image_size
-
         info = self.bitmap_info_header
         fheader = self.bitmap_file_header
-        file.write(pack("<HIII", BMPHeader, fheader.size+2, 0, fheader.offset))
+
+        #fheader.offset = 14 + self.bitmap_info_header.size
+        #if info.bit_count == 24 or info.bit_count == 32:
+        #    info.image_size = info.width * info.height * info.bit_count//8
+        #    if info.bit_count == 24:
+        #        info.image_size += self.bitmap_info_header.width*3
+        #fheader.size = fheader.offset + info.image_size
+
+        file.write(pack("<HIII", BMPHeader, fheader.size, 0000, fheader.offset))
         file.write(pack("<III", info.size, info.width, info.height))
         file.write(pack("<HHII", info.planes, info.bit_count, info.compression, info.image_size))
-        file.write(pack("<II", 2834, 2834))
+        file.write(pack("<II", 999, 999))
         file.write(pack("<II", info.color_used, info.color_important))
         if self.bitmap_info_header.bit_count == 24:
             for i in range(self.bitmap_info_header.height, -1, -1):
-                for j in range(self.bitmap_info_header.width):
-                    # print("{0} {1}".format(i,j))
+                for j in range(len(self.rgb[0])):
                     file.write(pack("<B", self.rgb[i][j].blue))
                     file.write(pack("<B", self.rgb[i][j].green))
                     file.write(pack("<B", self.rgb[i][j].red))
@@ -173,7 +174,7 @@ class Image:
         self.bitmap_info_header.width = width
         self.bitmap_info_header.height = height
         self.bitmap_info_header.bit_count = bit_count
-        self.bitmap_info_header.image_size = 800*600*(bit_count//8) # change for less bits
+        self.bitmap_info_header.image_size =width*height*(bit_count//8) # change for less bits
         self.bitmap_info_header.size = 40
         self.bitmap_info_header.planes = 1
         self.bitmap_info_header.compression = 0
@@ -228,21 +229,21 @@ class Image:
         for i in range(img.bitmap_info_header.height + 1):
             img.rgb[i] = [RGB() for j in range(img.bitmap_info_header.width)]
 
-        if height>self.bitmap_info_header.height:
+        if height > self.bitmap_info_header.height:
             counter_height = (height-self.bitmap_info_header.height)/self.bitmap_info_header.height
             height_bigger = True
         elif height< self.bitmap_info_header.height:
-            counter_height = (self.bitmap_info_header.height-height)/self.bitmap_info_header.height
+            counter_height = (self.bitmap_info_header.height-height)/height
             height_bigger = False
         else:
             counter_height = 0
             height_bigger = True
 
         if width>self.bitmap_info_header.width:
-            counter_width = (width - self.bitmap_info_header.width)/self.bitmap_info_header.width
+            counter_width: float = (width - self.bitmap_info_header.width)/self.bitmap_info_header.width
             width_bigger = True
         elif width<self.bitmap_info_header.width:
-            counter_width = (self.bitmap_info_header.width - width)/self.bitmap_info_header.width
+            counter_width:float = (self.bitmap_info_header.width - width)/width
             width_bigger = False
         else:
             counter_width = 0
@@ -252,36 +253,53 @@ class Image:
         counter_height_temp = counter_height
         source_i = 0
 
-        for i in range(height):
+        for i in range(height+1):
             source_j = 0
+            counter_width_temp = float(counter_width)
             for j in range(width):
                 img.rgb[i][j].blue = copy.deepcopy(self.rgb[source_i][source_j].blue)
                 img.rgb[i][j].green = copy.deepcopy(self.rgb[source_i][source_j].green)
                 img.rgb[i][j].red = copy.deepcopy(self.rgb[source_i][source_j].red)
                 counter_width_temp += counter_width
-
-                if counter_width_temp > 1:
-                    counter_width_temp -= 1
-                    if not width_bigger and source_j + 2 <= self.bitmap_info_header.width - 1:
-                        source_j += 2
-                    if width_bigger and counter_width >= 1:
-                        #counter_width_temp += 1
-                        counter_width_temp -= int(counter_width)
+                if width_bigger:
+                    if counter_width_temp > 1:
+                        counter_width_temp -= 1
+                        if width_bigger and counter_width >= 1:
+                            counter_width_temp -= int(counter_width)
+                    else:
+                        if source_j + 1 <= self.bitmap_info_header.width - 1:
+                            source_j += 1
                 else:
-                    if source_j + 1 <= self.bitmap_info_header.width - 1:
-                        source_j += 1
+                    if source_j + 1 + int(counter_width_temp) <= self.bitmap_info_header.width - 1:
+                        source_j += 1 + int(counter_width_temp)
+                    else:
+                        source_j = self.bitmap_info_header.width - 1
+                    if counter_width_temp > 1:
+                        if counter_width > 1:
+                            counter_width_temp -= float(int(counter_width))
+                        else:
+                            counter_width_temp -= 1.0000001
 
-            counter_height_temp += counter_height
-            if counter_height_temp > 1:
-                counter_height_temp -= 1
-                if not height_bigger and source_i + 1 <= self.bitmap_info_header.height - 1:
-                    source_i += 1
-                if height_bigger and counter_height >= 1:
-                    #counter_height_temp += 1
-                    counter_height_temp -= int(counter_height)
+            counter_height_temp += counter_height           # TODO yep, there too
+            if height_bigger:
+                if counter_height_temp > 1:
+                    counter_height_temp -= 1
+                    if counter_height >= 1:
+                        counter_height_temp -= int(counter_height)
+                else:
+                    if source_i + 1 <= self.bitmap_info_header.height - 1:
+                        source_i += 1
             else:
-                if source_i + 1 <= self.bitmap_info_header.height - 1:
-                    source_i += 1
+                if source_i + 1 + int(counter_height_temp) <= self.bitmap_info_header.height - 1:
+                    source_i += 1 + int(counter_height_temp)
+                else:
+                    source_i = self.bitmap_info_header.height - 1
+                if counter_height_temp > 1:
+                    if counter_height>1:
+                        counter_height_temp -= int(counter_height)
+                    else:
+                        counter_height_temp -= 1.0000001
+
         return img
 
 
@@ -304,7 +322,8 @@ class Image:
         overheight = False
         for i in range(0, self.bitmap_info_header.image_size+add, color_counter):
             width = (i//color_counter) % self.bitmap_info_header.width
-            height = self.bitmap_info_header.height - (0 if add != 0 else 1) - (i//color_counter) // self.bitmap_info_header.width  # BTW somewhy bmp writes not left to right up to down, but l-to-r down-to-up. Why the hell?
+            height = self.bitmap_info_header.height - (0 if add == 0 else 1) - (i//color_counter) \
+                     // self.bitmap_info_header.width    # BTW somewhy bmp writes not left to right up to down, but l-to-r down-to-up. Why the hell?
             try:
                 self.rgb[height][width].blue = ord(unpack('<c', file[0x0 + i + offset:0x0 + i + offset + 1])[0])  # And also it writes not r-g-b, but b-g-r. Why, why, for the love of god why???
                 self.rgb[height][width].green = ord(unpack('<c', file[0x1 + i + offset:0x1 + i + offset + 1])[0])
@@ -319,10 +338,11 @@ class Image:
                 print(height, end =" ")
                 print(self.rgb[height][width].blue)
 
-        if overheight:
+        if False:
             self.bitmap_info_header.height -= 1
             self.rgb.pop(0)
-        self.bitmap_info_header.image_size = self.bitmap_info_header.width * self.bitmap_info_header.size * self.bitmap_info_header.bit_count // 3
+        self.bitmap_info_header.image_size = self.bitmap_info_header.width * self.bitmap_info_header.size *\
+                                             self.bitmap_info_header.bit_count // 3
         self.bitmap_file_header.size = self.bitmap_file_header.offset + self.bitmap_info_header.image_size
 
 
@@ -351,9 +371,11 @@ class Image:
 #img_downsized = img_default.copy_with_changed_size(10,10)
 #img_downsized.write_image("test_sized_down.bmp")
 
-img_default = Image.read_from_file("test40.bmp")
-img_down = img_default.copy_with_changed_size(160, 240)
-img_down.write_image("test_down.bmp")
+img_default = Image.read_from_file("test.bmp")
+#img_temp = img_default.copy_with_changed_size(39, 56)   # TODO
+img_down = img_default.copy_with_changed_size(334, 500)
+#img_down = Image.set_default(255, 35, 60, 24)
+img_default.write_image("test_down1111.bmp")
 
 
 def read_image(filename:str):
@@ -373,3 +395,69 @@ def write_image(img: Image, filename:str):
 def copy_with_changed_size(img: Image, width:int, height:int):
     img_copy = img.copy_with_changed_size(width, height)
     return img_copy
+
+
+def write(img: Image):
+    file = open("tessst.bmp", "wb")
+
+    fhead = img.bitmap_file_header
+    ihead = img.bitmap_info_header
+
+    fhead.offset = 14 + img.bitmap_info_header.size
+    if ihead.bit_count == 24 or ihead.bit_count == 32:
+        ihead.image_size = ihead.width * ihead.height * ihead.bit_count // 8
+        if ihead.bit_count == 24:
+            ihead.image_size += img.bitmap_info_header.width * 3
+    fhead.size = fhead.offset + ihead.image_size
+
+    file.write(pack("<HI", BMPHeader, fhead.size))
+    file.write(pack("<II", 0, fhead.offset))
+    file.write(pack("<III", ihead.size, ihead.width, ihead.height))
+    file.write(pack("<HHI", ihead.planes, ihead.bit_count, ihead.compression))
+    file.write(pack("<III", ihead.image_size, 2400, 2400))
+    file.write(pack("<II", ihead.color_used, ihead.color_important))
+
+    for i in range(ihead.height, -1, -1):
+        for j in range(ihead.width):
+            file.write(pack("<B", img.rgb[i][j].blue))
+            file.write(pack("<B", img.rgb[i][j].green))
+            file.write(pack("<B", img.rgb[i][j].red))
+    file.close()
+
+
+def test():
+    test_array = [["{00}-{1}".format(j,i) for j in range(40)] for i in range(60)]
+    array = [[0 for j in range(35)] for i in range(55)]
+    counter_height = (len(test_array)-len(array))/len(array)
+    counter_width = (len(test_array[0])-len(array[0]))/len(array[0])
+    counter_height_temp = counter_height
+    print(counter_width)
+    source_i = 0
+    for i in range(len(array)):
+        source_j = 0
+        counter_width_temp = counter_width
+        for j in range(len(array[i])):
+            array[i][j] = test_array[source_i][source_j]
+            counter_width_temp += counter_width
+            if source_j + 1 + int(counter_width_temp) <= len(test_array[i])-1:
+                source_j += 1 + int(counter_width_temp)
+            else:
+                source_j = len(test_array[i]) - 1
+            if counter_width_temp > 1:
+                if counter_width > 1:
+                    counter_width_temp -= int(counter_width)
+                else:
+                    counter_width_temp -= 1.0000001
+        print(array[i])
+        counter_height_temp += counter_height
+        if source_i + 1 + int(counter_height_temp) <= len(test_array) - 1:
+            source_i += 1 + int(counter_height_temp)
+        else:
+            source_i = len(test_array) - 1
+        if counter_height_temp > 1:
+            if counter_height>1:
+                counter_height_temp -= int(counter_height)
+            else:
+                counter_height_temp -= 1.000001
+
+write(img_down)
