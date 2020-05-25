@@ -270,26 +270,35 @@ class Image:
                         if source_j + 1 <= self.bitmap_info_header.width - 1:
                             source_j += 1
                 else:
-                    if source_j + 1 + int(counter_width) <= self.bitmap_info_header.width - 1:
-                        source_j += 1 + int(counter_width)
+                    if source_j + 1 + int(counter_width_temp) <= self.bitmap_info_header.width - 1:
+                        source_j += 1 + int(counter_width_temp)
                     else:
                         source_j = self.bitmap_info_header.width - 1
-                    if counter_width > 1:
-                        counter_width_temp -= int(counter_width)
-                    else:
-                        counter_width_temp -= 1.00001
+                    if counter_width_temp > 1:
+                        if counter_width > 1:
+                            counter_width_temp -= float(int(counter_width))
+                        else:
+                            counter_width_temp -= 1.0000001
 
             counter_height_temp += counter_height
-            if counter_height_temp > 1:
-                counter_height_temp -= 1
-                if not height_bigger and source_i + 1 <= self.bitmap_info_header.height - 1:
-                    source_i += 1
-                if height_bigger and counter_height >= 1:
-                    #counter_height_temp += 1
-                    counter_height_temp -= int(counter_height)
+            if height_bigger:
+                if counter_height_temp > 1:
+                    counter_height_temp -= 1
+                    if counter_height >= 1:
+                        counter_height_temp -= int(counter_height)
+                else:
+                    if source_i + 1 <= self.bitmap_info_header.height - 1:
+                        source_i += 1
             else:
-                if source_i + 1 <= self.bitmap_info_header.height - 1:
-                    source_i += 1
+                if source_i + 1 + int(counter_height_temp) <= self.bitmap_info_header.height - 1:
+                    source_i += 1 + int(counter_height_temp)
+                else:
+                    source_i = self.bitmap_info_header.height - 1
+                if counter_height_temp > 1:
+                    if counter_height > 1:
+                        counter_height_temp -= int(counter_height)
+                    else:
+                        counter_height_temp -= 1.0000001
         return img
 
 
@@ -359,8 +368,8 @@ class Image:
 #img_downsized = img_default.copy_with_changed_size(10,10)
 #img_downsized.write_image("test_sized_down.bmp")
 
-img_default = Image.read_from_file("test.bmp")
-img_down = img_default.copy_with_changed_size(160, 240)
+img_default = Image.read_from_file("test40.bmp")
+img_down = img_default.copy_with_changed_size(20, 60)
 img_down.write_image("test_down.bmp")
 
 
