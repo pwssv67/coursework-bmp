@@ -260,16 +260,24 @@ class Image:
                 img.rgb[i][j].red = copy.deepcopy(self.rgb[source_i][source_j].red)
                 counter_width_temp += counter_width
 
-                if counter_width_temp > 1:
-                    counter_width_temp -= 1
-                    if not width_bigger and source_j + 2 <= self.bitmap_info_header.width - 1:
-                        source_j += 2
-                    if width_bigger and counter_width >= 1:
-                        #counter_width_temp += 1
-                        counter_width_temp -= int(counter_width)
+                if width_bigger:
+                    if counter_width_temp > 1:
+                        counter_width_temp -= 1
+                        if width_bigger and counter_width >= 1:
+                            #counter_width_temp += 1
+                            counter_width_temp -= int(counter_width)
+                    else:
+                        if source_j + 1 <= self.bitmap_info_header.width - 1:
+                            source_j += 1
                 else:
-                    if source_j + 1 <= self.bitmap_info_header.width - 1:
-                        source_j += 1
+                    if source_j + 1 + int(counter_width) <= self.bitmap_info_header.width - 1:
+                        source_j += 1 + int(counter_width)
+                    else:
+                        source_j = self.bitmap_info_header.width - 1
+                    if counter_width > 1:
+                        counter_width_temp -= int(counter_width)
+                    else:
+                        counter_width_temp -= 1.00001
 
             counter_height_temp += counter_height
             if counter_height_temp > 1:
@@ -351,7 +359,7 @@ class Image:
 #img_downsized = img_default.copy_with_changed_size(10,10)
 #img_downsized.write_image("test_sized_down.bmp")
 
-img_default = Image.read_from_file("test40.bmp")
+img_default = Image.read_from_file("test.bmp")
 img_down = img_default.copy_with_changed_size(160, 240)
 img_down.write_image("test_down.bmp")
 
