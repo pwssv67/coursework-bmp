@@ -4,6 +4,7 @@ import re
 from struct import unpack
 from struct import pack
 import copy
+import math
 
 BMPHeader = 0x4D42
 
@@ -98,6 +99,7 @@ class Image:
         self.file = None
         self.rgb = None
         self.rgb_quad = None
+        self.palette = None
         self.bitmap_info_header = BitMapInfoHeader
         self.bitmap_file_header = BitMapFileHeader
 
@@ -117,7 +119,7 @@ class Image:
                 filename[filename.rfind("."):len(filename)] = ""
                 filename += "(1)" + extension
 
-        if not self.bitmap_file_header.size == self.bitmap_file_header.offset + self.bitmap_info_header.image_size:
+        if self.bitmap_info_header.bit_count > 8 and not self.bitmap_file_header.size == self.bitmap_file_header.offset + self.bitmap_info_header.image_size:
             self.bitmap_file_header.offset = 14 + self.bitmap_info_header.size
             if self.bitmap_info_header.bit_count == 24:
                 self.bitmap_info_header.image_size += self.bitmap_info_header.width*3 - 2
@@ -145,6 +147,31 @@ class Image:
                     file.write(pack("<B", self.rgb[i][j].green))
                     file.write(pack("<B", self.rgb[i][j].red))
                     file.write(pack("<B", 0))
+        elif self.bitmap_info_header.bit_count == 8:
+            if self.palette is [] or self.palette is None:
+                self.palette = self.create_palette(self.bitmap_info_header.bit_count)
+            for color in self.palette:
+                file.write(pack("<BBBB", color,color,color, 0))
+            for i in range(self.bitmap_info_header.height, -1, -1):
+                for j in range(self.bitmap_info_header.width):
+                    file.write(pack("<B", self.rgb[i][j].red))
+        elif self.bitmap_info_header.bit_count == 4:
+            if self.palette is [] or self.palette is None:
+                self.palette = self.create_palette(self.bitmap_info_header.bit_count)
+            for color in self.palette:
+                file.write(pack("<BBBB", color,color,color, 0))
+            symbol = chr(0)
+            symbol_counter = 0
+            for i in range(self.bitmap_info_header.height, -1, -1):
+                for j in range(self.bitmap_info_header.width):
+                    symbol = pack("<B", (ord(symbol) << 4) + self.rgb[i][j].red)
+                    symbol_counter += 1
+                    if symbol_counter >= 2:
+                        file.write(symbol)
+                        symbol = chr(0)
+                        symbol_counter = 0
+            if symbol != chr(0):
+                file.write(pack("<B", ord(symbol) << 4))
         file.write(pack("<H", 0))
 
     @classmethod
@@ -301,7 +328,6 @@ class Image:
                         counter_height_temp -= 1.0000001
         return img
 
-
     def read_pixels_from_file(self, file):
         offset = self.bitmap_file_header.offset
         self.rgb = [[RGB()] for i in range(self.bitmap_info_header.height+1)]
@@ -327,7 +353,9 @@ class Image:
                 self.rgb[height][width].green = ord(unpack('<c', file[0x1 + i + offset:0x1 + i + offset + 1])[0])
                 self.rgb[height][width].red = ord(unpack('<c', file[0x2 + i + offset:0x2 + i + offset + 1])[0])
             except struct.error:
-                overheight = True
+                self.rgb[height][width].red = 0
+                self.rgb[height][width].green = 0
+                self.rgb[height][width].blue = 0
                 pass
             if False:
                 print(i)
@@ -336,12 +364,45 @@ class Image:
                 print(height, end =" ")
                 print(self.rgb[height][width].blue)
 
-        if overheight:
-            self.bitmap_info_header.height -= 1
-            self.rgb.pop(0)
         self.bitmap_info_header.image_size = self.bitmap_info_header.width * self.bitmap_info_header.size * self.bitmap_info_header.bit_count // 3
         self.bitmap_file_header.size = self.bitmap_file_header.offset + self.bitmap_info_header.image_size
 
+    def copy_with_changed_bitcount(self, bit_size: int):
+        if bit_size < 4 or bit_size > 8:
+            print("only 4 or 8 bit")
+            print("so now it's 8")
+            bit_size = 8
+        img = self.copy_with_changed_size(self.bitmap_info_header.width, self.bitmap_info_header.height)
+        img.bitmap_info_header.bit_count = bit_size
+        img.bitmap_info_header.color_used = 2**bit_size
+        img.bitmap_file_header.offset += 2**bit_size*4
+        img.bitmap_info_header.image_size = img.bitmap_info_header.width * img.bitmap_info_header.height
+        if bit_size == 4:
+            img.bitmap_info_header.image_size = math.ceil(img.bitmap_info_header.image_size / 2)
+        img.bitmap_file_header.size = img.bitmap_info_header.image_size + img.bitmap_file_header.offset
+        img.bitmap_file_header.size += 2**bit_size*3
+        for i in range(img.bitmap_info_header.height, -1, -1):
+            for j in range(img.bitmap_info_header.width):
+                color = int(0.299*img.rgb[i][j].red + 0.597*img.rgb[i][j].green + 0.114*img.rgb[i][j].blue) // 4 if bit_size == 4 else 1
+                if color >= 2**bit_size:
+                    color = 2**bit_size-1
+                img.rgb[i][j].red = img.rgb[i][j].green = img.rgb[i][j].blue = color
+        img.palette = img.create_palette(bit_size)
+        return img
+
+    def create_palette(self, bit_count):
+        palette = []
+        if bit_count == 8:
+            for i in range(2**bit_count):
+                palette.append(i)
+            return palette
+        elif bit_count == 4:
+            #palette.append(0)
+            for i in range(15, 256, 16):
+                palette.append(i)
+            return palette
+        else:
+            print("only 4 or 8 bit ")
 
 #f = open_file("test.bmp")
 #bm = read_file_header(f)
@@ -369,8 +430,9 @@ class Image:
 #img_downsized.write_image("test_sized_down.bmp")
 
 img_default = Image.read_from_file("test40.bmp")
-img_down = img_default.copy_with_changed_size(20, 60)
-img_down.write_image("test_down.bmp")
+img_down = img_default.copy_with_changed_bitcount(4)
+img_down.write_image("test_down_4bit.bmp")
+
 
 
 def read_image(filename:str):
