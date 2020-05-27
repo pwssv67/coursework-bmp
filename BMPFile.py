@@ -147,6 +147,7 @@ class Image:
                     file.write(pack("<B", self.rgb[i][j].green))
                     file.write(pack("<B", self.rgb[i][j].red))
                     file.write(pack("<B", 0))
+
         elif self.bitmap_info_header.bit_count == 8:
             if self.palette is [] or self.palette is None:
                 self.palette = self.create_palette(self.bitmap_info_header.bit_count)
@@ -155,6 +156,7 @@ class Image:
             for i in range(self.bitmap_info_header.height, -1, -1):
                 for j in range(self.bitmap_info_header.width):
                     file.write(pack("<B", self.rgb[i][j].red))
+
         elif self.bitmap_info_header.bit_count == 4:
             if self.palette is [] or self.palette is None:
                 self.palette = self.create_palette(self.bitmap_info_header.bit_count)
@@ -279,7 +281,7 @@ class Image:
         counter_height_temp = counter_height
         source_i = 0
 
-        for i in range(height):
+        for i in range(height+1):
             source_j = 0
             for j in range(width):
                 img.rgb[i][j].blue = copy.deepcopy(self.rgb[source_i][source_j].blue)
@@ -317,10 +319,10 @@ class Image:
                     if source_i + 1 <= self.bitmap_info_header.height - 1:
                         source_i += 1
             else:
-                if source_i + 1 + int(counter_height_temp) <= self.bitmap_info_header.height - 1:
+                if source_i + 1 + int(counter_height_temp) <= self.bitmap_info_header.height:
                     source_i += 1 + int(counter_height_temp)
                 else:
-                    source_i = self.bitmap_info_header.height - 1
+                    source_i = self.bitmap_info_header.height
                 if counter_height_temp > 1:
                     if counter_height > 1:
                         counter_height_temp -= int(counter_height)
@@ -342,27 +344,64 @@ class Image:
             add = 0
         else:
             color_counter = 3
-            add = 0
+            add = self.bitmap_info_header.width*3
             print("Something weird just happened! It's neither 32, nor 24 bit per pixel")
         overheight = False
-        for i in range(0, self.bitmap_info_header.image_size+add, color_counter):
-            width = (i//color_counter) % self.bitmap_info_header.width
-            height = self.bitmap_info_header.height - (0 if add != 0 else 1) - (i//color_counter) // self.bitmap_info_header.width  # BTW somewhy bmp writes not left to right up to down, but l-to-r down-to-up. Why the hell?
-            try:
-                self.rgb[height][width].blue = ord(unpack('<c', file[0x0 + i + offset:0x0 + i + offset + 1])[0])  # And also it writes not r-g-b, but b-g-r. Why, why, for the love of god why???
-                self.rgb[height][width].green = ord(unpack('<c', file[0x1 + i + offset:0x1 + i + offset + 1])[0])
-                self.rgb[height][width].red = ord(unpack('<c', file[0x2 + i + offset:0x2 + i + offset + 1])[0])
-            except struct.error:
-                self.rgb[height][width].red = 0
-                self.rgb[height][width].green = 0
-                self.rgb[height][width].blue = 0
-                pass
-            if False:
-                print(i)
-            if False and height>400:
-                print(width, end = " ")
-                print(height, end =" ")
-                print(self.rgb[height][width].blue)
+        if self.bitmap_info_header.bit_count>8:
+            for i in range(0, self.bitmap_info_header.image_size+add, color_counter):
+                width = (i//color_counter) % self.bitmap_info_header.width
+                height = self.bitmap_info_header.height - (0 if add != 0 else 1) - (i//color_counter) // self.bitmap_info_header.width  # BTW somewhy bmp writes not left to right up to down, but l-to-r down-to-up. Why the hell?
+                try:
+                    self.rgb[height][width].blue = ord(unpack('<c', file[0x0 + i + offset:0x0 + i + offset + 1])[0])  # And also it writes not r-g-b, but b-g-r. Why, why, for the love of god why???
+                    self.rgb[height][width].green = ord(unpack('<c', file[0x1 + i + offset:0x1 + i + offset + 1])[0])
+                    self.rgb[height][width].red = ord(unpack('<c', file[0x2 + i + offset:0x2 + i + offset + 1])[0])
+                except struct.error:
+                    self.rgb[height][width].red = 0
+                    self.rgb[height][width].green = 0
+                    self.rgb[height][width].blue = 0
+                    pass
+                if False:
+                    print(i)
+                if False and height>400:
+                    print(width, end = " ")
+                    print(height, end =" ")
+                    print(self.rgb[height][width].blue)
+
+        elif self.bitmap_info_header.bit_count == 8:
+            for i in range(0, self.bitmap_info_header.image_size+self.bitmap_info_header.width):
+                width = (i) % self.bitmap_info_header.width
+                height = self.bitmap_info_header.height - (i) // self.bitmap_info_header.width
+                try:
+                    self.rgb[height][width].blue = ord(unpack('<c', file[0x0 + i + offset:0x0 + i + offset + 1])[0])  # And also it writes not r-g-b, but b-g-r. Why, why, for the love of god why???
+                    self.rgb[height][width].red = self.rgb[height][width].green = self.rgb[height][width].blue
+                except struct.error:
+                    self.rgb[height][width].red = 0
+                    self.rgb[height][width].green = 0
+                    self.rgb[height][width].blue = 0
+            self.palette = self.create_palette(8)
+
+        elif self.bitmap_info_header.bit_count == 4:
+            symbol = chr(0)
+            read_second = False
+            j = 0
+            for i in range(0, self.bitmap_info_header.image_size*2):
+                width = (i) % self.bitmap_info_header.width
+                height = self.bitmap_info_header.height - (i) // self.bitmap_info_header.width
+                try:
+                    if read_second:
+                        color = symbol & 0b1111 << 4
+                        j += 1
+                        read_second = False
+                    else:
+                        symbol = ord(unpack('<c', file[0x0 + j + offset:0x0 + j + offset + 1])[0])  # And also it writes not r-g-b, but b-g-r. Why, why, for the love of god why???
+                        color = symbol & 0b11110000
+                        read_second = True
+                    self.rgb[height][width].red = self.rgb[height][width].green = self.rgb[height][width].blue = color
+                except struct.error:
+                    self.rgb[height][width].red = 0
+                    self.rgb[height][width].green = 0
+                    self.rgb[height][width].blue = 0
+            self.palette = self.create_palette(4)
 
         self.bitmap_info_header.image_size = self.bitmap_info_header.width * self.bitmap_info_header.size * self.bitmap_info_header.bit_count // 3
         self.bitmap_file_header.size = self.bitmap_file_header.offset + self.bitmap_info_header.image_size
@@ -380,7 +419,7 @@ class Image:
         if bit_size == 4:
             img.bitmap_info_header.image_size = math.ceil(img.bitmap_info_header.image_size / 2)
         img.bitmap_file_header.size = img.bitmap_info_header.image_size + img.bitmap_file_header.offset
-        img.bitmap_file_header.size += 2**bit_size*3
+        img.bitmap_file_header.size += 2**bit_size*4
         for i in range(img.bitmap_info_header.height, -1, -1):
             for j in range(img.bitmap_info_header.width):
                 color = int(0.299*img.rgb[i][j].red + 0.597*img.rgb[i][j].green + 0.114*img.rgb[i][j].blue) // 4 if bit_size == 4 else 1
@@ -388,6 +427,24 @@ class Image:
                     color = 2**bit_size-1
                 img.rgb[i][j].red = img.rgb[i][j].green = img.rgb[i][j].blue = color
         img.palette = img.create_palette(bit_size)
+        return img
+
+    def copy_to_non_palette(self, bit_size:24):
+        img = self.copy_with_changed_size(self.bitmap_info_header.width, self.bitmap_info_header.height)
+        img.bitmap_info_header.bit_count = bit_size
+        img.bitmap_info_header.color_used = 0
+        #img.bitmap_file_header.offset -= (2 ** self.bitmap_info_header.bit_count) * 4
+        img.bitmap_info_header.image_size = img.bitmap_info_header.width * img.bitmap_info_header.height * bit_size // 8
+        img.bitmap_file_header.size = img.bitmap_info_header.image_size + img.bitmap_file_header.offset
+        if self.bitmap_info_header.bit_count == 8:
+            for i in range(img.bitmap_info_header.height, -1, -1):
+                for j in range(img.bitmap_info_header.width):
+                    img.rgb[i][j].red = img.rgb[i][j].green = img.rgb[i][j].blue = self.palette[img.rgb[i][j].red]
+        else:
+            for i in range(img.bitmap_info_header.height, -1, -1):
+                for j in range(img.bitmap_info_header.width):
+                    img.rgb[i][j].red = img.rgb[i][j].green = img.rgb[i][j].blue = self.palette[(img.rgb[i][j].red+1)//16]
+        img.palette = None
         return img
 
     def create_palette(self, bit_count):
@@ -429,9 +486,13 @@ class Image:
 #img_downsized = img_default.copy_with_changed_size(10,10)
 #img_downsized.write_image("test_sized_down.bmp")
 
-img_default = Image.read_from_file("test40.bmp")
-img_down = img_default.copy_with_changed_bitcount(4)
-img_down.write_image("test_down_4bit.bmp")
+#img_default = Image.read_from_file("test40.bmp")
+#img_down = img_default.copy_with_changed_bitcount(4)
+#img_down.write_image("test_down_4bit.bmp")
+
+img_tononpalette = Image.read_from_file("test_down_4bit.bmp").copy_to_non_palette(24)
+img_tononpalette.write_image("nonpalette tessst.bmp")
+
 
 
 
