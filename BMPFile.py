@@ -283,6 +283,7 @@ class Image:
 
         for i in range(height+1):
             source_j = 0
+            counter_width_temp = counter_width
             for j in range(width):
                 img.rgb[i][j].blue = copy.deepcopy(self.rgb[source_i][source_j].blue)
                 img.rgb[i][j].green = copy.deepcopy(self.rgb[source_i][source_j].green)
@@ -292,7 +293,7 @@ class Image:
                 if width_bigger:
                     if counter_width_temp > 1:
                         counter_width_temp -= 1
-                        if width_bigger and counter_width >= 1:
+                        if  counter_width >= 1:
                             #counter_width_temp += 1
                             counter_width_temp -= int(counter_width)
                     else:
@@ -406,7 +407,7 @@ class Image:
         self.bitmap_info_header.image_size = self.bitmap_info_header.width * self.bitmap_info_header.size * self.bitmap_info_header.bit_count // 3
         self.bitmap_file_header.size = self.bitmap_file_header.offset + self.bitmap_info_header.image_size
 
-    def copy_with_changed_bitcount(self, bit_size: int):
+    def copy_to_palette(self, bit_size: int):
         if bit_size < 4 or bit_size > 8:
             print("only 4 or 8 bit")
             print("so now it's 8")
@@ -429,7 +430,7 @@ class Image:
         img.palette = img.create_palette(bit_size)
         return img
 
-    def copy_to_non_palette(self, bit_size:24):
+    def copy_to_non_palette(self, bit_size: int = 24):
         img = self.copy_with_changed_size(self.bitmap_info_header.width, self.bitmap_info_header.height)
         img.bitmap_info_header.bit_count = bit_size
         img.bitmap_info_header.color_used = 0
